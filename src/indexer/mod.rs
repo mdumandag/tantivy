@@ -4,7 +4,7 @@
 //! `IndexWriter` is the main entry point for that, which created from
 //! [`Index::writer`](crate::Index::writer).
 
-pub(crate) mod delete_queue;
+pub mod delete_queue;
 pub(crate) mod path_to_unordered_id;
 
 pub(crate) mod doc_id_mapping;
@@ -20,27 +20,26 @@ pub(crate) mod merger;
 pub(crate) mod operation;
 pub(crate) mod prepared_commit;
 mod segment_entry;
-mod segment_manager;
-mod segment_register;
+pub mod segment_manager;
+pub mod segment_register;
 pub(crate) mod segment_serializer;
 pub(crate) mod segment_updater;
 pub(crate) mod segment_writer;
 pub(crate) mod single_segment_index_writer;
-mod stamper;
+pub mod stamper;
 
 use crossbeam_channel as channel;
 use smallvec::SmallVec;
 
-pub use self::index_writer::{IndexWriter, IndexWriterOptions};
+pub use self::index_writer::{advance_deletes, apply_deletes, IndexWriter, IndexWriterOptions};
 pub use self::log_merge_policy::LogMergePolicy;
 pub use self::merge_operation::MergeOperation;
 pub use self::merge_policy::{MergeCandidate, MergePolicy, NoMergePolicy};
-use self::operation::AddOperation;
-pub use self::operation::UserOperation;
+pub use self::operation::{AddOperation, DeleteOperation, UserOperation};
 pub use self::prepared_commit::PreparedCommit;
 pub use self::segment_entry::SegmentEntry;
 pub(crate) use self::segment_serializer::SegmentSerializer;
-pub use self::segment_updater::{merge_filtered_segments, merge_indices};
+pub use self::segment_updater::{merge, merge_filtered_segments, merge_indices, save_metas};
 pub use self::segment_writer::SegmentWriter;
 pub use self::single_segment_index_writer::SingleSegmentIndexWriter;
 
