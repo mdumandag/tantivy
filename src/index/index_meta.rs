@@ -37,7 +37,7 @@ impl SegmentMetaInventory {
         let inner = InnerSegmentMeta {
             segment_id,
             max_doc,
-            include_temp_doc_store: Arc::new(AtomicBool::new(true)),
+            include_temp_doc_store: Arc::new(AtomicBool::new(false)),
             deletes: None,
         };
         SegmentMeta::from(self.inventory.track(inner))
@@ -85,13 +85,12 @@ impl SegmentMeta {
         self.tracked.segment_id
     }
 
-    /// Removes the Component::TempStore from the alive list and
-    /// therefore marks the temp docstore file to be deleted by
-    /// the garbage collection.
-    pub fn untrack_temp_docstore(&self) {
+    /// Adds the Component::TempStore to the files of the segment, so that
+    /// garbage collection keeps the temp docstore while the segment is written.
+    pub(crate) fn track_temp_docstore(&self) {
         self.tracked
             .include_temp_doc_store
-            .store(false, std::sync::atomic::Ordering::Relaxed);
+            .store(true, std::sync::atomic::Ordering::Relaxed);
     }
 
     /// Returns the number of deleted documents.
@@ -103,28 +102,26 @@ impl SegmentMeta {
             .unwrap_or(0u32)
     }
 
-    /// Returns the list of files that
-    /// are required for the segment meta.
-    /// Note: Some of the returned files may not exist depending on the state of the segment.
+    /// Returns the files of the segment.
     ///
     /// This is useful as the way tantivy removes files
     /// is by removing all files that have been created by tantivy
     /// and are not used by any segment anymore.
     pub fn list_files(&self) -> HashSet<PathBuf> {
-        if self
+        let include_temp_doc_store = self
             .tracked
             .include_temp_doc_store
-            .load(std::sync::atomic::Ordering::Relaxed)
-        {
-            SegmentComponent::iterator()
-                .map(|component| self.relative_path(*component))
-                .collect::<HashSet<PathBuf>>()
-        } else {
-            SegmentComponent::iterator()
-                .filter(|comp| *comp != &SegmentComponent::TempStore)
-                .map(|component| self.relative_path(*component))
-                .collect::<HashSet<PathBuf>>()
+            .load(std::sync::atomic::Ordering::Relaxed);
+        let mut files = HashSet::new();
+        for component in SegmentComponent::iterator() {
+            match component {
+                SegmentComponent::TempStore if !include_temp_doc_store => continue,
+                SegmentComponent::Delete if self.delete_opstamp().is_none() => continue,
+                _ => {}
+            }
+            files.insert(self.relative_path(*component));
         }
+        files
     }
 
     /// Returns the relative path of a component of our segment.
@@ -183,7 +180,7 @@ impl SegmentMeta {
             segment_id: inner_meta.segment_id,
             max_doc,
             deletes: None,
-            include_temp_doc_store: Arc::new(AtomicBool::new(true)),
+            include_temp_doc_store: Arc::new(AtomicBool::new(false)),
         });
         SegmentMeta { tracked }
     }
@@ -202,7 +199,7 @@ impl SegmentMeta {
         let tracked = self.tracked.map(move |inner_meta| InnerSegmentMeta {
             segment_id: inner_meta.segment_id,
             max_doc: inner_meta.max_doc,
-            include_temp_doc_store: Arc::new(AtomicBool::new(true)),
+            include_temp_doc_store: Arc::new(AtomicBool::new(false)),
             deletes: Some(delete_meta),
         });
         SegmentMeta { tracked }
@@ -214,8 +211,8 @@ struct InnerSegmentMeta {
     segment_id: SegmentId,
     max_doc: u32,
     pub deletes: Option<DeleteMeta>,
-    /// If you want to avoid the SegmentComponent::TempStore file to be covered by
-    /// garbage collection and deleted, set this to true. This is used during merge.
+    /// True on the meta of a segment that opened its SegmentComponent::TempStore file, which only
+    /// an index sorted by a field does. Garbage collection keeps the file while that meta lives.
     #[serde(skip)]
     #[serde(default = "default_temp_store")]
     pub(crate) include_temp_doc_store: Arc<AtomicBool>,

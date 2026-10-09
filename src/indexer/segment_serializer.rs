@@ -28,6 +28,7 @@ impl SegmentSerializer {
         let remapping_required = segment.index().settings().sort_by_field.is_some() && !is_in_merge;
         let settings = segment.index().settings().clone();
         let store_writer = if remapping_required {
+            segment.meta().track_temp_docstore();
             let store_write = segment.open_write(SegmentComponent::TempStore)?;
             StoreWriter::new(
                 store_write,

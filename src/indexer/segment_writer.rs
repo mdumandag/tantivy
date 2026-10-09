@@ -87,10 +87,16 @@ impl SegmentWriter {
     /// - segment: The segment being written
     /// - schema
     pub fn for_segment(memory_budget_in_bytes: usize, segment: Segment) -> crate::Result<Self> {
+        let table_size = compute_initial_table_size(memory_budget_in_bytes)?;
+        Self::for_segment_with_table_size(table_size, segment)
+    }
+
+    /// Creates a new `SegmentWriter` whose term table starts with `table_size` slots, a power of
+    /// 2. The table grows as terms arrive.
+    pub fn for_segment_with_table_size(table_size: usize, segment: Segment) -> crate::Result<Self> {
         let schema = segment.schema();
         let tokenizer_manager = segment.index().tokenizers().clone();
         let tokenizer_manager_fast_field = segment.index().fast_field_tokenizer().clone();
-        let table_size = compute_initial_table_size(memory_budget_in_bytes)?;
         let segment_serializer = SegmentSerializer::for_segment(segment, false)?;
         let per_field_postings_writers = PerFieldPostingsWriter::for_schema(&schema);
         let per_field_text_analyzers = schema
